@@ -21,19 +21,6 @@
      (operation-transformer (o1 o2)
        [deletion? (order deletion-location transform-deletion-deletion o1 o2)]))])
 
-(define (string-perform-text-operation o d)
-  (match o
-    [(insertion loc0 str)
-     (define loc (max 0 (min (string-length d) loc0)))
-     (string-append (substring d 0 loc)
-                    str
-                    (substring d loc))]
-    [(deletion loc len)
-     (define lhs (max 0 loc))
-     (define rhs (min (+ loc len) (string-length d)))
-     (string-append (substring d 0 lhs)
-                    (substring d rhs))]))
-
 (define (order a xf o1 o2)
   (if (<= (a o1) (a o2))
       (xf o1 o2)
@@ -54,10 +41,18 @@
 (define (transform-insertion-deletion o1 o2)
   (match-define (insertion loc1 str1) o1)
   (match-define (deletion loc2 len2) o2)
-  (cond
-    [(and (>= loc1 loc2) (< loc1 (+ loc2 len2)))
-     (values (insertion loc2 "") (deletion loc2 (+ len2 (string-length str1))))]
-    [(< loc1 loc2)
-     (values (insertion loc1 str1) (deletion (+ loc2 (string-length str1)) len2))]
-    [else
-     (values (insertion (- loc1 len2) str1) (deletion loc2 len2))]))
+  (cond [(and (>= loc1 loc2) (< loc1 (+ loc2 len2)))
+         (values (insertion loc2 "") (deletion loc2 (+ len2 (string-length str1))))]
+        [(< loc1 loc2)
+         (values (insertion loc1 str1) (deletion (+ loc2 (string-length str1)) len2))]
+        [else
+         (values (insertion (- loc1 len2) str1) (deletion loc2 len2))]))
+
+(define (string-perform-text-operation o d)
+  (match o
+    [(insertion loc0 str)
+     (define loc (max 0 (min (string-length d) loc0)))
+     (string-append (substring d 0 loc) str (substring d loc))]
+    [(deletion loc len)
+     (string-append (substring d 0 (max 0 loc))
+                    (substring d (min (+ loc len) (string-length d))))]))
