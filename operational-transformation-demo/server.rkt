@@ -1,12 +1,7 @@
-#lang racket/base
+#lang racket
 
 (require racket/async-channel)
-(require racket/cmdline)
-(require racket/match)
-(require racket/port)
-(require racket/file)
 (require racket/serialize)
-(require racket/tcp)
 (require operational-transformation)
 (require operational-transformation/text/simple-document)
 
