@@ -98,7 +98,7 @@
     (when p (! s (incorporate-operation-from-client (unbox s) p))))
 
   (define (receive! cb)
-    (define p (operation-following (unbox s) (client-state-server-revision (unbox cb))))
+    (define p (extract-operation (unbox s) (client-state-server-revision (unbox cb))))
     (when p
       (! cb (incorporate-operation-from-server (unbox cb) p))
       (receive! cb)))

@@ -50,8 +50,7 @@
                         (incorporate-operation-from-client (state-server-state s) p)]))
 
 (define (broadcast-operation s)
-  (define rev (- (server-state-revision (state-server-state s)) 1))
-  (define p (operation-following (state-server-state s) rev))
+  (define p (extract-operation (state-server-state s)))
   (if p
       (for/fold [(s s)] [(id (in-hash-keys (state-connections s)))]
         (send-to s id p))

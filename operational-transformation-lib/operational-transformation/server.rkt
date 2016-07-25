@@ -5,7 +5,7 @@
          (struct-out server-snapshot)
          make-server
          incorporate-operation-from-client
-         operation-following
+         extract-operation
          extract-snapshot)
 
 (require racket/match)
@@ -31,7 +31,7 @@
                 (cons original-id original-ids)
                 (cons op* (append ops-after-rev* ops-before-rev))))
 
-(define (operation-following s rev)
+(define (extract-operation s [rev (- (server-state-revision s) 1)])
   (define current-rev (server-state-revision s))
   (define index (- current-rev rev 1))
   (and (not (negative? index))
