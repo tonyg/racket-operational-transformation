@@ -6,10 +6,8 @@
 (require racket/port)
 (require racket/file)
 (require racket/serialize)
-(require racket/set)
 (require racket/tcp)
 (require operational-transformation)
-(require operational-transformation/text)
 (require operational-transformation/text/simple-document)
 
 (struct state (server-state connections filename) #:prefab)
