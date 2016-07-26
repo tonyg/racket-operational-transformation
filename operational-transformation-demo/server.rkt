@@ -6,6 +6,7 @@
 (require operational-transformation/text/simple-document)
 
 (struct state (server-state connections filename) #:prefab)
+(struct connection (thread seen-up-to) #:prefab)
 
 (define (run-server #:port port #:filename filename)
   (define listener (tcp-listen port 10 #t))
@@ -24,18 +25,25 @@
                         (define id (gensym 'conn))
                         (log-info "~a: connected" id)
                         (define t (thread (lambda () (connection-main id i o ch))))
-                        (let* ((s (struct-copy state s
+                        (let* ((snap (extract-snapshot (state-server-state s)))
+                               (s (struct-copy state s
                                                [connections
-                                                (hash-set (state-connections s) id t)]))
+                                                (hash-set (state-connections s) id
+                                                          (connection t (server-snapshot-revision
+                                                                         snap)))]))
                                (s (send-to s id filename))
-                               (s (send-to s id (extract-snapshot (state-server-state s)))))
+                               (s (send-to s id snap)))
                           (loop s))))
           (handle-evt ch
                       (match-lambda
                         [(? symbol? id)
                          (log-info "~a: disconnected" id)
-                         (loop (struct-copy state s
-                                            [connections (hash-remove (state-connections s) id)]))]
+                         (loop (forget-history
+                                (struct-copy state s
+                                             [connections
+                                              (hash-remove (state-connections s) id)])))]
+                        [(list id (? number? new-seen-up-to))
+                         (loop (forget-history (bump-seen-up-to s id new-seen-up-to)))]
                         [(list id (? pending-operation? p))
                          ;; (log-info "~a: sent us ~v" id p)
                          (loop (save (broadcast-operation (do-operation s p))))])))))
@@ -51,9 +59,22 @@
         (send-to s id p))
       s))
 
+(define (bump-seen-up-to s id new-seen-up-to)
+  (define c (hash-ref (state-connections s) id))
+  (struct-copy state s [connections (hash-set (state-connections s) id
+                                              (struct-copy connection c
+                                                           [seen-up-to new-seen-up-to]))]))
+
+(define (forget-history s)
+  (define min-rev
+    (for/fold [(rev (server-state-revision (state-server-state s)))]
+              [(c (in-hash-values (state-connections s)))]
+      (min rev (connection-seen-up-to c))))
+  (struct-copy state s [server-state (forget-operation-history (state-server-state s) min-rev)]))
+
 (define (send-to s id v)
   ;; (log-info "~a: sending them ~v" id v)
-  (thread-send (hash-ref (state-connections s) id) v #f)
+  (thread-send (connection-thread (hash-ref (state-connections s) id)) v #f)
   s)
 
 (define (save s)

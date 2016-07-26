@@ -81,7 +81,8 @@
        (send e enable #t)
        (send e focus)]
       [(? pending-operation? p)
-       (maybe-send! (incorporate-operation-from-server c p))]))
+       (maybe-send! (incorporate-operation-from-server c p))
+       (write-msg (client-state-server-revision c) o)]))
 
   (define (on-insertion loc str)
     (send-to-server! (insertion loc str)))

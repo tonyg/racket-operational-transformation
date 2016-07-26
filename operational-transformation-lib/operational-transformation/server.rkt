@@ -6,10 +6,11 @@
          make-server
          incorporate-operation-from-client
          extract-operation
-         extract-snapshot)
+         extract-snapshot
+         forget-operation-history)
 
 (require racket/match)
-(require (only-in racket/list split-at))
+(require (only-in racket/list split-at take))
 
 (require "operation.rkt")
 
@@ -22,26 +23,39 @@
 
 (define (incorporate-operation-from-client s p)
   (match-define (pending-operation revision original-id op) p)
-  (match-define (server-state doc revision-count original-ids all-operations) s)
-  (define-values (ops-after-rev ops-before-rev)
-    (split-at all-operations (- revision-count revision)))
-  (define-values (ops-after-rev* op*) (transform-operation ops-after-rev op))
-  (server-state (apply-operation op* doc)
-                (+ revision-count 1)
-                (cons original-id original-ids)
-                (cons op* (append ops-after-rev* ops-before-rev))))
+  (match-define (server-state doc newest-revision original-ids all-operations) s)
+  (define index (- newest-revision revision))
+  (cond [(or (negative? index) (> index (length all-operations)))
+         #f] ;; operation revision out of range
+        [else
+         (define-values (ops-after-rev ops-before-rev) (split-at all-operations index))
+         (define-values (ops-after-rev* op*) (transform-operation ops-after-rev op))
+         (server-state (apply-operation op* doc)
+                       (+ newest-revision 1)
+                       (cons original-id original-ids)
+                       (cons op* (append ops-after-rev* ops-before-rev)))]))
 
 (define (extract-operation s [rev (- (server-state-revision s) 1)])
-  (define current-rev (server-state-revision s))
-  (define index (- current-rev rev 1))
-  (and (not (negative? index))
-       (pending-operation rev
-                          (list-ref (server-state-original-ids s) index)
-                          (list-ref (server-state-operations s) index))))
+  (match-define (server-state _ newest-revision original-ids all-operations) s)
+  (define index (- newest-revision rev 1))
+  (and (not (or (negative? index) (>= index (length all-operations))))
+       (pending-operation rev (list-ref original-ids index) (list-ref all-operations index))))
 
 (define (extract-snapshot s)
   (server-snapshot (server-state-revision s)
                    (server-state-document s)))
+
+(define (forget-operation-history s up-to-revision)
+  (match-define (server-state _ newest-revision original-ids all-operations) s)
+  (define retain-count (- newest-revision up-to-revision))
+  (cond [(negative? up-to-revision)
+         (error 'forget-operation-history "Cannot forget operation not yet remembered")]
+        [(>= retain-count (length all-operations))
+         s]
+        [else
+         (struct-copy server-state s
+                      [original-ids (take original-ids retain-count)]
+                      [operations (take all-operations retain-count)])]))
 
 (module+ test
   (require rackunit)
