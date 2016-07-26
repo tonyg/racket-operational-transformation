@@ -11,9 +11,9 @@
 (require "server.rkt")
 
 (struct client-state (id ;; *Globally-unique* symbol (randomly generated)
-                      flush-count ;; Natural
+                      local-revisions-applied ;; Natural
                       server-revision ;; Natural
-                      operation-in-flight ;; Option PendingOperation
+                      operation-in-flight ;; Operation
                       operation-accumulator ;; Operation
                       document ;; Document
                       )
@@ -23,7 +23,7 @@
   (client-state (make-client-id)
                 0
                 (server-snapshot-revision snapshot)
-                #f
+                (identity-operation)
                 (identity-operation)
                 (server-snapshot-document snapshot)))
 
@@ -38,27 +38,20 @@
                 (compose-operation op (client-state-operation-accumulator c))]
                [document (apply-operation op (client-state-document c))]))
 
-(define (transform-pending-operation op p)
-  (match p
-    [(pending-operation rev id p-op)
-     (let-values (((op p-op) (transform-operation op p-op)))
-       (values op (pending-operation rev id p-op)))]
-    [#f
-     (values op #f)]))
-
 (define (incorporate-operation-from-server c new-op)
   (match-define (pending-operation expected-current-revision op-id op) new-op)
-  (match-define (client-state _ _ current-revision in-flight accumulator doc) c)
+  (match-define (client-state xid xcount current-revision in-flight accumulator doc) c)
   (when (not (equal? current-revision expected-current-revision))
     (error 'incorporate-operation-from-server
            "Out-of-order operation received: rev ~v, op ~v"
            expected-current-revision
            op))
-  (if (and in-flight (equal? (pending-operation-id in-flight) op-id))
+  (if (equal? op-id (list xid xcount))
       (struct-copy client-state c
+                   [local-revisions-applied (+ xcount 1)]
                    [server-revision (+ current-revision 1)]
-                   [operation-in-flight #f])
-      (let*-values (((op in-flight) (transform-pending-operation op in-flight))
+                   [operation-in-flight (identity-operation)])
+      (let*-values (((op in-flight) (transform-operation op in-flight))
                     ((op accumulator) (transform-operation op accumulator)))
         (struct-copy client-state c
                      [server-revision (+ current-revision 1)]
@@ -67,15 +60,14 @@
                      [document (apply-operation op doc #:remote? #t)]))))
 
 (define (flush-buffered-operation c)
-  (match-define (client-state client-id flush-count server-revision in-flight acc _) c)
-  (if (or in-flight (identity-operation? acc))
+  (match-define (client-state xid xcount server-revision in-flight acc _) c)
+  (if (or (not (identity-operation? in-flight)) (identity-operation? acc))
       (values #f
               c)
-      (let ((p (pending-operation server-revision (list client-id flush-count) acc)))
+      (let ((p (pending-operation server-revision (list xid xcount) acc)))
         (values p
                 (struct-copy client-state c
-                             [flush-count (+ flush-count 1)]
-                             [operation-in-flight p]
+                             [operation-in-flight acc]
                              [operation-accumulator (identity-operation)])))))
 
 (module+ test
