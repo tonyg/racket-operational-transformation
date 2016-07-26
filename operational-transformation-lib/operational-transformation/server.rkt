@@ -10,7 +10,7 @@
          forget-operation-history)
 
 (require racket/match)
-(require (only-in racket/list split-at take))
+(require (only-in racket/list take))
 
 (require "operation.rkt")
 
@@ -28,12 +28,12 @@
   (cond [(or (negative? index) (> index (length all-operations)))
          #f] ;; operation revision out of range
         [else
-         (define-values (ops-after-rev ops-before-rev) (split-at all-operations index))
-         (define-values (ops-after-rev* op*) (transform-operation ops-after-rev op))
+         (define ops-after-rev (take all-operations index))
+         (define-values (_ops-after-rev* op*) (transform-operation ops-after-rev op))
          (server-state (apply-operation op* doc)
                        (+ newest-revision 1)
                        (cons original-id original-ids)
-                       (cons op* (append ops-after-rev* ops-before-rev)))]))
+                       (cons op* all-operations))]))
 
 (define (extract-operation s [rev (- (server-state-revision s) 1)])
   (match-define (server-state _ newest-revision original-ids all-operations) s)

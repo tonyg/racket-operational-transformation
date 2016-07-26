@@ -38,9 +38,17 @@
                 (compose-operation op (client-state-operation-accumulator c))]
                [document (apply-operation op (client-state-document c))]))
 
+(define (transform-pending-operation op p)
+  (match p
+    [(pending-operation rev id p-op)
+     (let-values (((op p-op) (transform-operation op p-op)))
+       (values op (pending-operation rev id p-op)))]
+    [#f
+     (values op #f)]))
+
 (define (incorporate-operation-from-server c new-op)
   (match-define (pending-operation expected-current-revision op-id op) new-op)
-  (match-define (client-state _ _ current-revision in-flight _ doc) c)
+  (match-define (client-state _ _ current-revision in-flight accumulator doc) c)
   (when (not (equal? current-revision expected-current-revision))
     (error 'incorporate-operation-from-server
            "Out-of-order operation received: rev ~v, op ~v"
@@ -50,9 +58,13 @@
       (struct-copy client-state c
                    [server-revision (+ current-revision 1)]
                    [operation-in-flight #f])
-      (struct-copy client-state c
-                   [server-revision (+ current-revision 1)]
-                   [document (apply-operation op doc #:remote? #t)])))
+      (let*-values (((op in-flight) (transform-pending-operation op in-flight))
+                    ((op accumulator) (transform-operation op accumulator)))
+        (struct-copy client-state c
+                     [server-revision (+ current-revision 1)]
+                     [operation-in-flight in-flight]
+                     [operation-accumulator accumulator]
+                     [document (apply-operation op doc #:remote? #t)]))))
 
 (define (flush-buffered-operation c)
   (match-define (client-state client-id flush-count server-revision in-flight acc _) c)
@@ -72,14 +84,19 @@
   (require "text/simple-document.rkt")
   (require (submod "text/simple-document.rkt" test-data))
 
-  (define s (box (make-server d0)))
-  (define c1 (box (make-client (extract-snapshot (unbox s)))))
-  (define c2 (box (make-client (extract-snapshot (unbox s)))))
+  (define s (box #f))
+  (define c1 (box #f))
+  (define c2 (box #f))
 
-  (define (check-client cb expected)
+  (define (reset-to-doc! d)
+    (set-box! s (make-server d))
+    (set-box! c1 (make-client (extract-snapshot (unbox s))))
+    (set-box! c2 (make-client (extract-snapshot (unbox s)))))
+
+  (define-syntax-rule (check-client cb expected)
     (check-equal? (simple-document-text (client-state-document (unbox cb))) expected))
 
-  (define (check-server expected)
+  (define-syntax-rule (check-server expected)
     (check-equal? (simple-document-text (server-state-document (unbox s))) expected))
 
   (define (! b v)
@@ -103,6 +120,7 @@
       (! cb (incorporate-operation-from-server (unbox cb) p))
       (receive! cb)))
 
+  (reset-to-doc! d0)
   (check-server "abcde")
   (check-client c1 "abcde")
   (check-client c2 "abcde")
@@ -133,5 +151,32 @@
   (check-server "aduvwe")
   (check-client c1 "aduvwe")
   (check-client c2 "aduvwe")
+  (--)
+
+  ;;--------------------------------------------------
+  (reset-to-doc! (simple-document ""))
+  (check-server "")
+  (check-client c1 "")
+  (check-client c2 "")
+  (--)
+  (perform! c1 (insertion 0 "q"))
+  (perform! c2 (insertion 0 "a"))
+  (send! c1)
+  (send! c2)
+  (perform! c1 (insertion 1 "werty"))
+  (perform! c2 (insertion 1 "sdfgh"))
+  (check-client c1 "qwerty")
+  (check-client c2 "asdfgh")
+  (receive! c1)
+  (receive! c2)
+  (--)
+  (send! c1)
+  (send! c2)
+  (receive! c1)
+  (receive! c2)
+  (--)
+  (check-server "qawertysdfgh")
+  (check-client c1 "qawertysdfgh")
+  (check-client c2 "qawertysdfgh")
   (--)
   )

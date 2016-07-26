@@ -35,6 +35,10 @@
   (check-equal-values? (transform-operation i1 i2) (values i1 (insertion 6 "uvw")))
   (check-equal-values? (transform-operation d1 d2) (values (deletion 1 1) (deletion 1 1)))
 
+  (check-equal-values? (transform-operation (compose-operation (insertion 7 "uvw") i1) d1)
+                       (values (compose-operation (insertion 2 "uvw") (insertion 1 ""))
+                               (deletion 1 5)))
+
   (check-equal? (apply-operation (compose-operation d1 i1) d0) (simple-document "ayzcde"))
   (check-equal? (apply-operation (compose-operation i1 d1) d0) (simple-document "adxyze"))
   )
