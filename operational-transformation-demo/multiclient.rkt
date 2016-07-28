@@ -104,6 +104,7 @@
 
   (define (select-filename _widget _evt)
     (define selected-filename (send fns get-string-selection))
+    (send e enable #f)
     (write-msg selected-filename o))
 
   (define f (new frame%
