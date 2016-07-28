@@ -112,7 +112,7 @@
   (command-line
    #:once-each
    [("-p" "--port") server-port ((format "Server port (default ~v)" port))
-    (set! port server-port)]
+    (set! port (string->number server-port))]
    #:args (filename)
    (run-server #:port port
                #:filename filename)))
