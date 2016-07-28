@@ -14,6 +14,7 @@
                 [delete-callback (lambda (loc len) (void))])
     (super-new)
     (inherit get-text
+             select-all
              clear
              insert
              delete)
@@ -26,6 +27,7 @@
         (insert-callback loc (get-text loc (+ loc len)))))
     (define/public (replace-contents new-contents)
       (set! remote-edit? #t)
+      (select-all)
       (clear)
       (insert new-contents 0)
       (set! remote-edit? #f))
