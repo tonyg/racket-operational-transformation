@@ -113,6 +113,9 @@
 
   (define c #f)
 
+  (send (send (send t get-style-list) find-named-style "Standard")
+        set-delta (make-object style-delta% 'change-family 'modern))
+
   (thread (lambda ()
             (with-handlers [(values (lambda (e) (queue-callback disconnect!)))]
               (let loop ()
