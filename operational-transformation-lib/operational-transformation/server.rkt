@@ -48,7 +48,7 @@
 (define (forget-operation-history s up-to-revision)
   (match-define (server-state _ newest-revision original-ids all-operations) s)
   (define retain-count (- newest-revision up-to-revision))
-  (cond [(negative? up-to-revision)
+  (cond [(negative? retain-count)
          (error 'forget-operation-history "Cannot forget operation not yet remembered")]
         [(>= retain-count (length all-operations))
          s]
